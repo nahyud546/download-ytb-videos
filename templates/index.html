@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>YouTube → MP4</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; }
+  input, select, button { font-size: 16px; padding: 10px; }
+  #url { width: 100%; box-sizing: border-box; }
+  .row { display: flex; gap: 8px; margin-top: 12px; }
+  .row select { flex: 0 0 130px; } .row button { flex: 1; cursor: pointer; }
+  #status { margin-top: 16px; padding: 12px; background: #f5f5f5; border-radius: 8px; min-height: 40px; }
+  ul { padding-left: 18px; }
+</style>
+</head>
+<body>
+<h2>📥 Nhập link YouTube → tải MP4 chất lượng cao</h2>
+<p>Paste link rồi bấm <b>Tải ngay</b>. File lưu trong thư mục <code>downloads/</code> trên máy.</p>
+<input id="url" placeholder="https://www.youtube.com/watch?v=...  hoặc  https://youtu.be/..." />
+<div class="row">
+  <select id="quality">
+    <option value="best" selected>Best (cao nhất)</option>
+    <option value="1080p">1080p</option>
+    <option value="720p">720p</option>
+    <option value="480p">480p</option>
+  </select>
+  <button onclick="startDownload()">Tải ngay</button>
+</div>
+<div id="status">Chờ nhập link…</div>
+<h3>File đã tải (mới nhất)</h3>
+<ul>
+{% for f in files %}
+  <li><a href="/files/{{ f.name }}">{{ f.name }}</a> ({{ f.size_mb }} MB)</li>
+{% else %}
+  <li><i>Chưa có file nào.</i></li>
+{% endfor %}
+</ul>
+<script>
+async function startDownload() {
+  const url = document.getElementById('url').value.trim();
+  const quality = document.getElementById('quality').value;
+  const st = document.getElementById('status');
+  if (!url) { st.textContent = '⚠️ Vui lòng nhập link YouTube.'; return; }
+  st.textContent = '⏳ Đang gửi yêu cầu tải…';
+  const res = await fetch('/api/download', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({url, quality})
+  });
+  const data = await res.json();
+  if (!data.ok) { st.textContent = '❌ ' + (data.error || 'Lỗi'); return; }
+  const jobId = data.job_id;
+  const timer = setInterval(async () => {
+    const r = await fetch('/api/status/' + jobId);
+    const j = await r.json();
+    const job = j.job;
+    if (job.status === 'downloading' || job.status === 'queued') {
+      st.textContent = `⏳ Đang tải… ${job.progress || 0}%`;
+    } else if (job.status === 'done') {
+      clearInterval(timer);
+      st.innerHTML = `✅ Xong! <a href="/files/${job.file}">Tải file ${job.file}</a> (đã lưu trong downloads/)`;
+      setTimeout(()=>location.reload(), 1500);
+    } else {
+      clearInterval(timer);
+      st.textContent = '❌ Lỗi: ' + (job.error || 'không rõ');
+    }
+  }, 1000);
+}
+</script>
+</body>
+</html>
